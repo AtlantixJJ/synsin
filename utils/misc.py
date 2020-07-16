@@ -12,8 +12,7 @@ def imread(fpath):
 
 
 def imread_pil(fpath):
-  with open(os.path.join(fpath), "rb") as f:
-    return Image.open(f)
+  return Image.open(open(os.path.join(fpath), "rb"))
 
 
 def imwrite(fpath, image, format="RGB"):
@@ -26,3 +25,7 @@ def imwrite(fpath, image, format="RGB"):
     ext = "PNG"
   with open(os.path.join(fpath), "wb") as f:
     Image.fromarray(image.astype("uint8")).convert(format).save(f, format=ext)
+
+
+def torch2numpy(x):
+  return x.detach().cpu().numpy()

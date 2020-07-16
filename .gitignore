@@ -1,5 +1,9 @@
 data
 .ipynb_checkpoints
 modelcheckpoints
-
+stylegan2_bedroom_synthesis
+temp
+*.mp4
 *.pyc
+*.png
+*.jpg

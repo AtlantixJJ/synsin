@@ -2,6 +2,7 @@
 python script/video_preprocessing.py <video dir>
 """
 import os, glob, sys
+import time, datetime
 
 DIR = sys.argv[1]
 
@@ -20,3 +21,14 @@ for video_path in videos:
   os.system(ffmpeg_cmd.format(
     video_name=video_path,
     target=f"{frame_dir}/%04d.png"))
+  with open(f"{frame_dir}/list.txt", "w") as f:
+    length = len(glob.glob(f"{frame_dir}/*.png"))
+    print(length)
+    start_time = datetime.datetime.fromtimestamp(time.time())
+    delta = datetime.timedelta(seconds=1/29.6) # frame length
+    ctime = start_time
+    for i in range(length):
+      t = ctime.timestamp()
+      f.write(f"{t} {frame_dir}/{i:04d}.png\n")
+      ctime = ctime + delta
+
