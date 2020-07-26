@@ -1,0 +1,9 @@
+[2020-07-18 09:38:33,128][INFO] Initializing generator.
+[2020-07-18 09:38:33,128][INFO] Build network for module `generator` in model `stylegan_bedroom`.
+[2020-07-18 09:38:33,342][INFO] Loading pytorch weights from `models/pretrain/pytorch/stylegan_bedroom_generator.pth`.
+[2020-07-18 09:38:33,503][INFO] Successfully loaded!
+[2020-07-18 09:38:36,468][INFO] Current `lod` is 0.0.
+[2020-07-18 09:38:36,469][INFO] Preparing latent codes.
+[2020-07-18 09:38:36,469][INFO]   Sample latent codes randomly.
+[2020-07-18 09:38:36,470][INFO] Generating 16 samples.
+[2020-07-18 09:38:37,041][INFO] Saving results.

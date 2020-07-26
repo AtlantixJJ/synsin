@@ -1,3 +1,5 @@
+import sys
+sys.path.insert(0, ".")
 import matplotlib.pyplot as plt
 import quaternion, os, argparse, glob
 import numpy as np
@@ -15,21 +17,34 @@ from utils.misc import imread_pil, imwrite, torch2numpy
 from utils.visualize import heatmap_numpy, VideoWriter
 from options.options import get_model
 
-#ffmpeg -i identity_intrinsic.mp4 -vf "[in] pad=2*iw:ih [left]; movie=wrong_intrinsic.mp4 [right]; [left][right] overlay=main_w/2:0 [out]" -b:v 16000k Output.mp4
-
 parser = argparse.ArgumentParser()
 parser.add_argument('--model-path',
   default='./modelcheckpoints/realestate/synsin.pth')
+parser.add_argument('--MPI',
+  default='0,1')
 parser.add_argument('--indir',
-  default='stylegan2_bedroom_synthesis')
+  default='mydata/stylegan_bedroom_synthesis')
+parser.add_argument('--outdir',
+  default='mydata/stylegan_bedroom_transform')
 args = parser.parse_args()
 torch.backends.cudnn.enabled = True
+
+if "," not in args.MPI:
+  world_size = int(args.MPI)
+  gpus = [0, 1, 2, 3, 4, 5, 6, 7]
+  for i in range(world_size):
+    os.system(f"CUDA_VISIBLE_DEVICES={gpus[i]} python script/gvc_single.py --model-path {args.model_path} --indir {args.indir} --outdir {args.outdir} --MPI {i},{world_size} &")
+  exit(0)
+
+rank, world_size = args.MPI.split(",")
+rank = int(rank)
+world_size = int(world_size)
 
 # synsin is z buffer model
 MODEL_PATH = args.model_path
 BATCH_SIZE = 4
 device = 'cuda'
-DIR = args.indir #'/home/b146466/myvideo/frames/1_translation_down/'
+DIR = args.indir
 
 # the option is stored in the pth file
 opts = torch.load(MODEL_PATH)['opts']
@@ -81,15 +96,25 @@ offset = np.array(
 K = np.matmul(offset, K)
 """
 
-DIST = 0.1
+DIST = [0.2, 0.2, 0.2, 0.2, 1]
 Kinv = np.linalg.inv(K).astype(np.float32)
 K = torch.from_numpy(K).unsqueeze(0).float()
 Kinv = torch.from_numpy(Kinv).unsqueeze(0).float()
 
+SN = 80
+params = [list(np.linspace(0, DIST[i], SN)) + list(np.linspace(0, -DIST[i], SN)) for i in range(5)]
+RTs = []
+for i, param in enumerate(params):
+  RTs.extend([[p if j == i else 0 for j in range(5)]
+    for p in param])
+RTs = [get_RT(*p) for p in RTs]
+
 fpaths = glob.glob(f"{DIR}/*.jpg") + glob.glob(f"{DIR}/*.png")
 fpaths = [f for f in fpaths if "depth" not in f]
 fpaths.sort()
-for fpath in fpaths:
+for ind, fpath in enumerate(fpaths):
+  if ind % world_size != rank:
+    continue
   name = fpath[fpath.rfind("/")+1:-4]
   image = imread_pil(fpath)
   im = transform(image)
@@ -103,30 +128,16 @@ for fpath in fpaths:
   }
 
   # Get parameters for the transformation
-  SN = 48
-  params = [circle(DIST, SN) for _ in range(5)]
-  RTs = []
-  for i, param in enumerate(params):
-    RTs.extend([[p if j == i else 0 for j in range(5)]
-      for p in param])
-  RTs = [get_RT(*p) for p in RTs]
 
-  # video_writer = VideoWriter(f"{DIR}/{name}_transformed.mp4", 256, 256)
   pred_imgs = []
   # Generate a new view at the new transformation
   with torch.no_grad():
     # list of (1, 3, 256, 256) [-1, 1]
-    BS = SN
-
-    for i in tqdm(range(len(RTs) // 4)):
+    BS = 40
+    for i in tqdm(range(len(RTs) // BS)):
       res = model_to_test.model.module.forward_angle(
         batch, RTs[i * BS : (i + 1) * BS])
       pred_imgs.extend(res)
-      #for r in res:
-      #  img = torch2numpy((r.clamp(-1, 1) + 1) / 2 * 255).astype("int8")
-      #  img = img[0].transpose(1, 2, 0)
-      #  print(img.shape)
-      #  video_writer.write(img)
 
     # (1, 1, 256, 256)
     depth = nn.Sigmoid()(model_to_test.model.module.pts_regressor(
@@ -134,13 +145,7 @@ for fpath in fpaths:
     depth = depth.clamp(max=0.04)
     depth = (depth - depth.min()) / (depth.max() - depth.min())
     depth = torch.cat([depth] * 3, 1)
-    #heatmap = heatmap_numpy(torch2numpy(depth)[0])
-    #heatmap = torch.from_numpy(heatmap).permute(0, 3, 1, 2)
-    #print(heatmap.shape, heatmap.min(), heatmap.max())
     vutils.save_image(depth, f"{DIR}/{name}_depth.png")
 
-  #vutils.save_image((im.unsqueeze(0) + 1) / 2, "original.png")
-  os.system("rm temp/*.png")
   for i, img in enumerate(pred_imgs):
-    vutils.save_image((img + 1) / 2, "temp/transform%03d.png" % i)
-  os.system(f"ffmpeg -y -f image2 -i temp/transform%03d.png -pix_fmt yuv420p -b:v 16000k {DIR}/{name}_transformed.mp4")
+    vutils.save_image((img + 1) / 2, f"{args.outdir}/{name}_transform{i:03d}.png")
