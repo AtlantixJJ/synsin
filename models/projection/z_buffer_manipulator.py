@@ -48,7 +48,8 @@ class PtsManipulator(nn.Module):
         self.register_buffer("xyzs", xyzs)
 
     def project_pts(
-        self, pts3D, K, K_inv, RT_cam1, RTinv_cam1, RT_cam2, RTinv_cam2
+        self, pts3D, K, K_inv, RT_cam1, RTinv_cam1, RT_cam2, RTinv_cam2,
+        mask=False
     ):
         # PERFORM PROJECTION
         # Project the world points into the new view
@@ -79,11 +80,12 @@ class PtsManipulator(nn.Module):
         sampler = sampler * torch.Tensor([1, -1, -1]).unsqueeze(0).unsqueeze(
             2
         ).to(sampler.device)
-
+        if mask:
+            return sampler, mask
         return sampler
 
     def forward_justpts(
-        self, src, pred_pts, K, K_inv, RT_cam1, RTinv_cam1, RT_cam2, RTinv_cam2
+        self, src, pred_pts, K, K_inv, RT_cam1, RTinv_cam1, RT_cam2, RTinv_cam2, mask=False
     ):
         # Now project these points into a new view
         bs, c, w, h = src.size()
@@ -93,12 +95,19 @@ class PtsManipulator(nn.Module):
             pred_pts = pred_pts.view(bs, 1, -1)
             src = src.view(bs, c, -1)
 
-        pts3D = self.project_pts(
-            pred_pts, K, K_inv, RT_cam1, RTinv_cam1, RT_cam2, RTinv_cam2
-        )
+        res = self.project_pts(
+            pred_pts, K, K_inv, RT_cam1, RTinv_cam1, RT_cam2, RTinv_cam2,
+            mask=mask)
+        pts3D = mask = 0
+        if mask:
+            pts3D = res[0]
+            mask = res[1]
+        else:
+            pts3D = res
         pointcloud = pts3D.permute(0, 2, 1).contiguous()
         result = self.splatter(pointcloud, src)
-
+        if mask:
+            return result, mask
         return result
 
     def forward(

@@ -136,7 +136,7 @@ class ZbufferModelPts(nn.Module):
             },
         )
 
-    def forward_angle(self, batch, RTs, return_depth=False):
+    def forward_angle(self, batch, RTs, return_depth=False, mask=False):
         # Input values
         input_img = batch["images"][0]
 
@@ -164,18 +164,23 @@ class ZbufferModelPts(nn.Module):
 
         # Now rotate
         gen_imgs = []
+        masks = []
         for RT in RTs:
             torch.manual_seed(
                 0
             )  # Reset seed each time so that noise vectors are the same
-            gen_fs = self.pts_transformer.forward_justpts(
-                fs, regressed_pts, K, K_inv, identity, identity, RT, None
+            res = self.pts_transformer.forward_justpts(
+                fs, regressed_pts, K, K_inv, identity, identity, RT, None,
+                mask=mask
             )
+            if mask:
+                gen_imgs.append(self.projector(res[0]))
+                masks.append(res[1])
+            else:
+                gen_imgs.append(self.projector(res))
 
-            # now create a new image
-            gen_img = self.projector(gen_fs)
-
-            gen_imgs += [gen_img]
+        if mask:
+            return gen_imgs, masks
 
         if return_depth:
             return gen_imgs, regressed_pts

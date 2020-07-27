@@ -130,14 +130,17 @@ for ind, fpath in enumerate(fpaths):
   # Get parameters for the transformation
 
   pred_imgs = []
+  masks = []
   # Generate a new view at the new transformation
   with torch.no_grad():
     # list of (1, 3, 256, 256) [-1, 1]
     BS = 40
     for i in tqdm(range(len(RTs) // BS)):
-      res = model_to_test.model.module.forward_angle(
-        batch, RTs[i * BS : (i + 1) * BS])
-      pred_imgs.extend(res)
+      img, mask = model_to_test.model.module.forward_angle(
+        batch, RTs[i * BS : (i + 1) * BS], mask=True)
+      print(masks[0].shape)
+      masks.extend(mask)
+      pred_imgs.extend(img)
 
     # (1, 1, 256, 256)
     depth = nn.Sigmoid()(model_to_test.model.module.pts_regressor(
@@ -149,3 +152,4 @@ for ind, fpath in enumerate(fpaths):
 
   for i, img in enumerate(pred_imgs):
     vutils.save_image((img + 1) / 2, f"{args.outdir}/{name}_transform{i:03d}.png")
+    vutils.save_image((mask + 1) / 2, f"{args.outdir}/{name}_mask{i:03d}.png")
