@@ -31,6 +31,8 @@ class ZbufferModelPts(nn.Module):
             self.pts_transformer = PtsManipulator(opt.W, C=3, opt=opt)
         else:
             self.pts_transformer = PtsManipulator(opt.W, opt=opt)
+        self.mask_transformer = PtsManipulator(opt.W, 1, opt=opt)
+        self.existing_pts = torch.ones((1, 1, opt.W, opt.W)).cuda()
 
         self.projector = get_decoder(opt)
 
@@ -136,9 +138,12 @@ class ZbufferModelPts(nn.Module):
             },
         )
 
-    def forward_angle(self, batch, RTs, return_depth=False, mask=False):
+    def forward_angle(self, batch, RTs, return_depth=False, get_mask=False):
         # Input values
         input_img = batch["images"][0]
+        if input_img.size(0) != self.existing_pts.size(0):
+            self.existing_pts = self.existing_pts.repeat(
+                0, input_img.size(0))
 
         # Camera parameters
         K = batch["cameras"][0]["K"]
@@ -169,20 +174,17 @@ class ZbufferModelPts(nn.Module):
             torch.manual_seed(
                 0
             )  # Reset seed each time so that noise vectors are the same
-            res = self.pts_transformer.forward_justpts(
-                fs, regressed_pts, K, K_inv, identity, identity, RT, None,
-                mask=mask
-            )
-            if mask:
-                gen_imgs.append(self.projector(res[0]))
-                masks.append(res[1])
-            else:
-                gen_imgs.append(self.projector(res))
-
-        if mask:
-            return gen_imgs, masks
+            gen_img = self.pts_transformer.forward_justpts(
+                fs, regressed_pts, K, K_inv, identity, identity, RT, None)
+            mask = self.mask_transformer.forward_justpts(
+                self.existing_pts, regressed_pts, K, K_inv, identity, identity, RT, None)
+            gen_imgs.append(self.projector(gen_img))
+            masks.append(mask)
 
         if return_depth:
             return gen_imgs, regressed_pts
+
+        if get_mask:
+            return gen_imgs, masks
 
         return gen_imgs

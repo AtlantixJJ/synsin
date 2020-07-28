@@ -11,6 +11,7 @@ import torchvision.transforms as transforms
 import torchvision.utils as vutils
 
 from models.networks.sync_batchnorm import convert_model
+from models.projection.z_buffer_manipulator import PtsManipulator
 from models.base_model import BaseModel
 from data.simple import SimpleDataset
 from utils.misc import imread_pil, imwrite, torch2numpy
@@ -57,7 +58,7 @@ if 'sync' in opts.norm_G:
 model = nn.DataParallel(model).cuda()
 
 model_to_test = BaseModel(model, opts)
-model_to_test.load_state_dict(torch.load(MODEL_PATH)['state_dict'])
+model_to_test.load_state_dict(torch.load(MODEL_PATH)['state_dict'], strict=False)
 model_to_test.eval()
 
 transform = transforms.Compose([
@@ -131,14 +132,15 @@ for ind, fpath in enumerate(fpaths):
 
   pred_imgs = []
   masks = []
+
   # Generate a new view at the new transformation
   with torch.no_grad():
     # list of (1, 3, 256, 256) [-1, 1]
     BS = 40
     for i in tqdm(range(len(RTs) // BS)):
       img, mask = model_to_test.model.module.forward_angle(
-        batch, RTs[i * BS : (i + 1) * BS], mask=True)
-      print(masks[0].shape)
+        batch, RTs[i * BS : (i + 1) * BS], get_mask=True)
+
       masks.extend(mask)
       pred_imgs.extend(img)
 
@@ -150,6 +152,7 @@ for ind, fpath in enumerate(fpaths):
     depth = torch.cat([depth] * 3, 1)
     vutils.save_image(depth, f"{DIR}/{name}_depth.png")
 
-  for i, img in enumerate(pred_imgs):
+  for i, (img, mask) in enumerate(zip(pred_imgs, masks)):
     vutils.save_image((img + 1) / 2, f"{args.outdir}/{name}_transform{i:03d}.png")
-    vutils.save_image((mask + 1) / 2, f"{args.outdir}/{name}_mask{i:03d}.png")
+    mask = torch.cat([mask] * 3, 1).float()
+    vutils.save_image(mask, f"{args.outdir}/{name}_mask{i:03d}.png")
