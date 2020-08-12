@@ -22,7 +22,7 @@ device = 'cuda'
 DIR = args.indir
 
 class SynsinTransformer(object):
-  def __init__(self, model_path):
+  def __init__(self, model_path='modelcheckpoints/realestate/synsin.pth'):
     super().__init__()
     self.model_path = model_path
 
