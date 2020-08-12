@@ -13,13 +13,13 @@ import torchvision.utils as vutils
 from models.z_buffermodel import ZbufferModelPts
 from options.options import get_model
 
+
 torch.backends.cudnn.enabled = True
 
 # synsin is z buffer model
 MODEL_PATH = ""
 BATCH_SIZE = 4
 device = 'cuda'
-DIR = args.indir
 
 class SynsinTransformer(object):
   def __init__(self, model_path='modelcheckpoints/realestate/synsin.pth'):
@@ -27,13 +27,16 @@ class SynsinTransformer(object):
     self.model_path = model_path
 
     # the option is stored in the pth file
-    opts = torch.load(MODEL_PATH)['opts']
+    checkpoint = torch.load(model_path)
+    opts = checkpoint['opts']
     opts.render_ids = [1]
 
     self.model = ZbufferModelPts(opts).cuda()
-    self.model.load_state_dict(torch.load(MODEL_PATH)['state_dict'], strict=False)
+    origin_state_dict = checkpoint['state_dict']
+    state_dict = {k.replace("model.module.", "") : v
+      for k, v in origin_state_dict.items()}
+    missingkeys = self.model.load_state_dict(state_dict, strict=False)
     self.model.eval()
-    print(self.model)
 
     self.K, self.Kinv = get_K()
   
@@ -41,7 +44,7 @@ class SynsinTransformer(object):
     # handling default argument
     if DIST is None:
       DIST = [0.04, 0.04, 0.04, 0.04, 0.08]
-      SN = 4
+      step_num = 4
     if K is None:
       K = self.K
       Kinv = self.Kinv
@@ -55,7 +58,7 @@ class SynsinTransformer(object):
     # return the transformations for each image
     for img in x:
       batch = {
-        'images' : [x.unsqueeze(0)],
+        'images' : [img.unsqueeze(0)],
         'cameras' : [{'K' : K, 'Kinv' : Kinv}]
       }
 
@@ -99,10 +102,10 @@ def get_param(DIST, SN=4):
     for i in range(5)]
 
 
-def param2RT(param):
+def param2RT(params):
   RTs = []
   for i, param in enumerate(params):
     RTs.extend([[p if j == i else 0 for j in range(5)]
       for p in param])
-  RTs = [get_RT(*p) for p in RTs]
+  return [get_RT(*p) for p in RTs]
 

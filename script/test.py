@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import torchvision.transforms as transforms
 import torchvision.utils as vutils
+from utils.misc import imread_pil
 
 import syn
 
@@ -53,9 +54,9 @@ for ind, fpath in enumerate(fpaths):
   im = transform(image)
 
   # Get parameters for the transformation
-  pred_imgs, masks = synsin(im)
-  
-  for i, (img, mask) in enumerate(zip(pred_imgs, masks)):
+  pred_imgs, masks = synsin([im])
+ 
+  for i, (img, mask) in enumerate(zip(pred_imgs[0], masks[0])):
     vutils.save_image((img + 1) / 2, f"{args.outdir}/{name}_transform{i:03d}.png")
     mask = torch.cat([mask] * 3, 1).float()
     vutils.save_image(mask, f"{args.outdir}/{name}_mask{i:03d}.png")
